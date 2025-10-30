@@ -15,7 +15,7 @@
 ```
 ## Pipline structure 
 
-1. data_process = pipeline_data_process.py
-2. knowledge base + FAISS GPU index = pipeline_data_process.py
+1. Data_process = pipeline_data_process.py
+2. Knowledge base + FAISS GPU index = pipeline_data_process.py
 3. QLoRA fine-tuning (PEFT + bitsandbytes, GPU) = pipeline_03_qlora.py
-
+4. Local deployment = api_server.py
