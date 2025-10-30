@@ -1,0 +1,15 @@
+torch
+torchvision
+torchaudio --index-url https://download.pytorch.org/whl/cu121
+pyspark==3.5.3
+pandas
+pyarrow
+transformers>=4.44
+datasets
+accelerate
+peft
+bitsandbytes
+faiss-gpu-cu12
+sentence-transformers
+fastapi
+uvicorn[standard]
