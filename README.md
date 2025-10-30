@@ -1,1 +1,6 @@
-# bigdata_llm
+# LLM
+
+## Methodology
+![roject methodology](imgs/flow.png)
+
+
