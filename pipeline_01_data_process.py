@@ -32,6 +32,15 @@ appts_c      = clean(appointments)
 treats_c     = clean(treatments)
 bill_c       = clean(billing)
 
+
+# Rename duplicate columns before join
+patients_c = patients_c.withColumnRenamed("email", "patient_email")
+doctors_c  = doctors_c.withColumnRenamed("email", "doctor_email")
+patients_c = patients_c.withColumnRenamed("first_name", "patient_first_name")
+patients_c = patients_c.withColumnRenamed("last_name", "patient_last_name")
+doctors_c  = doctors_c.withColumnRenamed("first_name", "doctor_first_name")
+doctors_c  = doctors_c.withColumnRenamed("last_name", "doctor_last_name")
+
 # joins
 ap_pat        = appts_c.join(patients_c, "patient_id", "inner")
 ap_pat_doc    = ap_pat.join(doctors_c, "doctor_id", "inner")
@@ -41,14 +50,14 @@ final_join    = ap_pat_doc_tr.join(bill_c, ["patient_id","treatment_id"], "inner
 # write curated Parquet
 final_join.write.mode("overwrite").parquet(f"{args.out}/curated_parquet")
 
-# optional summaries for your 5 questions
-from pyspark.sql.functions import count, avg, month, to_date
-summary_by_doctor = (final_join.groupBy("doctor_id")
-                     .agg(count("*").alias("n_cases"), avg("cost").alias("avg_cost")))
-summary_by_doctor.write.mode("overwrite").parquet(f"{args.out}/summary_by_doctor")
+# # optional summaries for your 5 questions
+# from pyspark.sql.functions import count, avg, month, to_date
+# summary_by_doctor = (final_join.groupBy("doctor_id")
+#                      .agg(count("*").alias("n_cases"), avg("cost").alias("avg_cost")))
+# summary_by_doctor.write.mode("overwrite").parquet(f"{args.out}/summary_by_doctor")
 
-final_join.withColumn("month", month(to_date(col("appointment_date"))))\
-          .groupBy("month").count()\
-          .write.mode("overwrite").parquet(f"{args.out}/appts_by_month")
+# final_join.withColumn("month", month(to_date(col("appointment_date"))))\
+#           .groupBy("month").count()\
+#           .write.mode("overwrite").parquet(f"{args.out}/appts_by_month")
 
 spark.stop()
