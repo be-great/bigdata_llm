@@ -6,4 +6,3 @@ if [ ! -d 'ven' ]; then
 fi
 source ven/bin/activate
 pip install -r requirements.txt
-python3 main.py
