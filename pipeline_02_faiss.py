@@ -1,43 +1,73 @@
-
 import argparse, os
-import faiss, torch
+import numpy as np
+import torch, faiss
 from pyspark.sql import SparkSession
 from sentence_transformers import SentenceTransformer
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--curated", required=True, help="Parquet path of curated dataset")
-parser.add_argument("--out", required=True, help="Local folder to store FAISS index & mapping")
-args = parser.parse_args()
-os.makedirs(args.out, exist_ok=True)
+# Define placeholder paths directly for notebook execution
+curated_path = "data/output/curated_parquet/part.parquet"
+output_folder = "data/output/"
+
+os.makedirs(output_folder, exist_ok=True)
 
 spark = SparkSession.builder.appName("BuildFAISS").getOrCreate()
-df = spark.read.parquet(args.curated).select("patient_id","reason_for_visit","treatment_description")
-rows = df.na.fill("").select("patient_id","reason_for_visit","treatment_description").limit(200000).collect()
-spark.stop()
+# load the same final_join parquet
+df = spark.read.parquet(curated_path).na.fill("")
 
+# select only real columns that exist in your curated parquet
+df = df.select(
+    "patient_id", "patient_first_name", "patient_last_name", "gender",
+    "date_of_birth", "contact_number", "address", "registration_date",
+    "insurance_provider", "insurance_number", "patient_email",
+    "doctor_id", "doctor_first_name", "doctor_last_name", "specialization",
+    "phone_number", "years_experience", "hospital_branch", "doctor_email",
+    "appointment_id", "appointment_date", "appointment_time",
+    "reason_for_visit", "status",
+    "treatment_id", "treatment_type", "description", "cost", "treatment_date",
+    "bill_id", "bill_date", "amount", "payment_method", "payment_status"
+)
+
+rows = df.limit(20000).collect()
+spark.stop()
 # Build text corpus (short summaries)
 texts, ids = [], []
 for r in rows:
-    txt = f"patient:{r['patient_id']} reason:{r['reason_for_visit']} treatment:{r['treatment_description']}"
-    texts.append(txt)
-    ids.append(r['patient_id'])
+    fact = (
+        f"Patient {r['patient_first_name']} {r['patient_last_name']} "
+        f"(ID {r['patient_id']}, {r['gender']}) lives at {r['address']} "
+        f"and is insured by {r['insurance_provider']}. "
+        f"They had appointment {r['appointment_id']} with Dr. "
+        f"{r['doctor_first_name']} {r['doctor_last_name']} "
+        f"({r['specialization']}, {r['hospital_branch']}) "
+        f"on {r['appointment_date']} at {r['appointment_time']} "
+        f"for {r['reason_for_visit']}. "
+        f"The treatment was '{r['treatment_type']}' described as "
+        f"'{r['description']}' costing {r['cost']} dollars on {r['treatment_date']}. "
+        f"Bill {r['bill_id']} dated {r['bill_date']} amount {r['amount']} dollars "
+        f"paid by {r['payment_method']} (status: {r['payment_status']})."
+    )
+    texts.append(fact)
+    ids.append(f"{r['patient_id']}_{r['appointment_id']}_{r['doctor_id']}")
+
+print(f"Generated {len(texts)} hospital knowledge sentences.")
+
 
 # # Encoding : convert words to numeric format
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device=device)
 emb = model.encode(texts, batch_size=256, convert_to_numpy=True, show_progress_bar=True)
-
+d = emb.shape[1]
 # Building the Search Engine : similer patient link togther.
 # like sorting then do binary search fast.
-res = faiss.StandardGpuResources()
-index = faiss.IndexFlatL2(emb.shape[1])
-gpu_index = faiss.index_cpu_to_gpu(res, 0, index)
-gpu_index.add(emb)
-faiss.write_index(faiss.index_gpu_to_cpu(gpu_index), os.path.join(args.out,"kb.index"))
+res = faiss.StandardGpuResources() if torch.cuda.is_available() else None
+index = faiss.IndexFlatL2(d)
+if res:
+    index = faiss.index_cpu_to_gpu(res, 0, index)
+index.add(emb.astype(np.float32))
 
 # Save id mapping
 # saving the  sorted array 
-with open(os.path.join(args.out,"ids.txt"),"w") as f:
-    for i in ids: f.write(str(i)+"\n")
+faiss.write_index(index, os.path.join(output_folder, "kb.index"))
+np.save(os.path.join(output_folder, "facts.npy"), np.array(texts))
 
-print("FAISS index built:", gpu_index.ntotal)
+print("Knowledge base saved (doctors + patients + treatments + billing).")

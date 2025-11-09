@@ -5,4 +5,4 @@ if [ ! -d 'ven' ]; then
     virtualenv ven
 fi
 source ven/bin/activate
-pip install -r requirements.txt
+pip3 install -r requirements.txt

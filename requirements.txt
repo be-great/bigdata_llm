@@ -1,6 +1,8 @@
 pyspark==3.5.3
 pandas
-faiss-gpu==1.7.2
 torch
-transformers>=4.44
-typing_extensions==4.9.0
+transformers==4.44.2
+faiss-gpu
+typing_extensions
+sentence-transformers
+
