@@ -23,3 +23,16 @@
 # concepts :
 
 1. FAISS index: The goal of a FAISS index is to speed up searching by grouping similar data close to each other.
+
+
+#TODO
+1- create the 10 gb data 
+2- use big data processing (pyspark) : save each on parpuret format
+3- answer questions : 5 seneroiso:
+  A- which gender go the hospital more
+  B- which hospital branch have most doctor with more experience
+  C- which speialization domante the other speizlization
+  D- what is the  common reason for visit 
+  E- the rank for treatment from cost
+4- faiss each dataset by index 
+5- then the chat part
