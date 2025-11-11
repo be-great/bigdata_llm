@@ -4,70 +4,73 @@ import torch, faiss
 from pyspark.sql import SparkSession
 from sentence_transformers import SentenceTransformer
 
-# Define placeholder paths directly for notebook execution
-curated_path = "data/output/curated_parquet/part.parquet"
-output_folder = "data/output/"
-
-os.makedirs(output_folder, exist_ok=True)
+base = "data/curated_parquet"
+out = "data/output/kb"
+os.makedirs(out, exist_ok=True)
 
 spark = SparkSession.builder.appName("BuildFAISS").getOrCreate()
-# load the same final_join parquet
-df = spark.read.parquet(curated_path).na.fill("")
 
-# select only real columns that exist in your curated parquet
-df = df.select(
-    "patient_id", "patient_first_name", "patient_last_name", "gender",
-    "date_of_birth", "contact_number", "address", "registration_date",
-    "insurance_provider", "insurance_number", "patient_email",
-    "doctor_id", "doctor_first_name", "doctor_last_name", "specialization",
-    "phone_number", "years_experience", "hospital_branch", "doctor_email",
-    "appointment_id", "appointment_date", "appointment_time",
-    "reason_for_visit", "status",
-    "treatment_id", "treatment_type", "description", "cost", "treatment_date",
-    "bill_id", "bill_date", "amount", "payment_method", "payment_status"
-)
-
-rows = df.limit(20000).collect()
-spark.stop()
-# Build text corpus (short summaries)
-texts, ids = [], []
-for r in rows:
-    fact = (
-        f"Patient {r['patient_first_name']} {r['patient_last_name']} "
-        f"(ID {r['patient_id']}, {r['gender']}) lives at {r['address']} "
-        f"and is insured by {r['insurance_provider']}. "
-        f"They had appointment {r['appointment_id']} with Dr. "
-        f"{r['doctor_first_name']} {r['doctor_last_name']} "
-        f"({r['specialization']}, {r['hospital_branch']}) "
-        f"on {r['appointment_date']} at {r['appointment_time']} "
-        f"for {r['reason_for_visit']}. "
-        f"The treatment was '{r['treatment_type']}' described as "
-        f"'{r['description']}' costing {r['cost']} dollars on {r['treatment_date']}. "
-        f"Bill {r['bill_id']} dated {r['bill_date']} amount {r['amount']} dollars "
-        f"paid by {r['payment_method']} (status: {r['payment_status']})."
-    )
-    texts.append(fact)
-    ids.append(f"{r['patient_id']}_{r['appointment_id']}_{r['doctor_id']}")
-
-print(f"Generated {len(texts)} hospital knowledge sentences.")
+# Load parquet files
+patients  = spark.read.parquet(f"{base}/patients.parquet").na.fill("")
+doctors   = spark.read.parquet(f"{base}/doctors.parquet").na.fill("")
+appts     = spark.read.parquet(f"{base}/appointments.parquet").na.fill("")
+treats    = spark.read.parquet(f"{base}/treatments.parquet").na.fill("")
+billing   = spark.read.parquet(f"{base}/billing.parquet").na.fill("")
 
 
-# # Encoding : convert words to numeric format
+""""To convert text sentences into numerical embeddings"""
+# Load SentenceTransformer model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device=device)
-emb = model.encode(texts, batch_size=256, convert_to_numpy=True, show_progress_bar=True)
-d = emb.shape[1]
-# Building the Search Engine : similer patient link togther.
-# like sorting then do binary search fast.
-res = faiss.StandardGpuResources() if torch.cuda.is_available() else None
-index = faiss.IndexFlatL2(d)
-if res:
-    index = faiss.index_cpu_to_gpu(res, 0, index)
-index.add(emb.astype(np.float32))
+"""Function to build a knowledge base"""
+# turns each DataFrame row into a text
+# sentence and creates a corresponding
+# unique ID list. Example : patient Ali Bob
+def build_kb(df, name, text_func):
+    rows = df.collect()
+    texts, ids = [], []
+    for r in rows:
+        txt = text_func(r)
+        texts.append(txt)
+        ids.append(str(r[0]))  # first column = id
+    # The encoding step
+    emb = model.encode(texts, batch_size=256, convert_to_numpy=True, show_progress_bar=True)
+    d = emb.shape[1]
+    # Build FAISS index
+    res = faiss.StandardGpuResources() if torch.cuda.is_available() else None
+    index = faiss.IndexFlatL2(d)
+    if res:
+        index = faiss.index_cpu_to_gpu(res, 0, index)
+    index.add(emb.astype(np.float32))
+    # Save FAISS index and texts
+    faiss.write_index(index, f"{out}/{name}.index")
+    np.save(f"{out}/{name}_facts.npy", np.array(texts))
+    print(f"✅ {name.capitalize()} knowledge base saved ({len(texts)} facts)")
 
-# Save id mapping
-# saving the  sorted array 
-faiss.write_index(index, os.path.join(output_folder, "kb.index"))
-np.save(os.path.join(output_folder, "facts.npy"), np.array(texts))
+# ---- Define text builders for each dataset ----
+build_kb(
+    patients, "patients",
+    lambda r: f"Patient {r['patient_first_name']} {r['patient_last_name']} ({r['gender']}) born {r['date_of_birth']} lives at {r['address']} with insurance from {r['insurance_provider']}."
+)
 
-print("Knowledge base saved (doctors + patients + treatments + billing).")
+build_kb(
+    doctors, "doctors",
+    lambda r: f"Doctor {r['doctor_first_name']} {r['doctor_last_name']} specializes in {r['specialization']} with {r['years_experience']} years experience at {r['hospital_branch']}."
+)
+
+build_kb(
+    appts, "appointments",
+    lambda r: f"Appointment {r['appointment_id']} on {r['appointment_date']} at {r['appointment_time']} for reason {r['reason_for_visit']} with doctor {r['doctor_id']} and patient {r['patient_id']}."
+)
+
+build_kb(
+    treats, "treatments",
+    lambda r: f"Treatment {r['treatment_id']} of type {r['treatment_type']} described as {r['description']} costing {r['cost']} on {r['treatment_date']}."
+)
+
+build_kb(
+    billing, "billing",
+    lambda r: f"Billing record {r['bill_id']} dated {r['bill_date']} amount {r['amount']} paid via {r['payment_method']} (status {r['payment_status']})."
+)
+
+spark.stop()
