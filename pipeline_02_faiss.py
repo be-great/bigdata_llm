@@ -50,12 +50,12 @@ def build_kb(df, name, text_func):
 # ---- Define text builders for each dataset ----
 build_kb(
     patients, "patients",
-    lambda r: f"Patient {r['patient_first_name']} {r['patient_last_name']} with the id {'patient_id'} ({r['gender']}) born {r['date_of_birth']} lives at {r['address']} with insurance from {r['insurance_provider']}."
+    lambda r: f"Patient {r['patient_first_name']} {r['patient_last_name']} with the id {r['patient_id']} ({r['gender']}) born {r['date_of_birth']} lives at {r['address']} with insurance from {r['insurance_provider']}."
 )
 
 build_kb(
     doctors, "doctors",
-    lambda r: f"Doctor {r['doctor_first_name']} {r['doctor_last_name']} with the id {'doctor_id'} specializes in {r['specialization']} with {r['years_experience']} years experience at {r['hospital_branch']}."
+    lambda r: f"Doctor {r['doctor_first_name']} {r['doctor_last_name']} with the id {r['doctor_id']} specializes in {r['specialization']} with {r['years_experience']} years experience at {r['hospital_branch']}."
 )
 
 build_kb(
