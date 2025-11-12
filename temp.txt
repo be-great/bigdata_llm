@@ -1,5 +1,0 @@
-pandas==2.2.3
-torch==2.1.2           # choose +cu118 or +cu121 wheel if you use CUDA
-transformers==4.44.2
-faiss-gpu==1.7.2       # match CUDA version with your torch build
-typing_extensions==4.9.
