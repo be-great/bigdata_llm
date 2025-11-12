@@ -34,5 +34,5 @@
   C- which speialization domante the other speizlization
   D- what is the  common reason for visit 
   E- the rank for treatment from cost
-4- faiss each dataset by index 
-5- then the chat part
+
+4- TODO: copy columns to the question which is predict the patient who is going to come next month
