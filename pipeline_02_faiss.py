@@ -65,12 +65,12 @@ build_kb(
 
 build_kb(
     treats, "treatments",
-    lambda r: f"Treatment {r['treatment_id']} of type {r['treatment_type']} described as {r['description']} costing {r['cost']} on {r['treatment_date']}."
+    lambda r: f"Treatment {r['treatment_id']} of type {r['treatment_type']} for appointment id {r['appointment_id']} described as {r['description']} costing {r['cost']} on {r['treatment_date']}."
 )
 
 build_kb(
     billing, "billing",
-    lambda r: f"Billing record {r['bill_id']} dated {r['bill_date']} amount {r['amount']} paid via {r['payment_method']} (status {r['payment_status']})."
+    lambda r: f"Billing record {r['bill_id']} with the patient id {r['patient_id']} dated {r['bill_date']} amount {r['amount']} paid via {r['payment_method']} (status {r['payment_status']})."
 )
 
 spark.stop()
